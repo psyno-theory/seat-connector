@@ -77,14 +77,11 @@ class User extends Model
     public function areAllTokensValid(): bool
     {
         $exemptions = $this->getStrictExemptCharacterIds();
-
-        // Include revoked tokens so missing authentication cannot disappear from the check.
-        $required_ids = $this->user->refresh_tokens()->withTrashed()
-            ->pluck('character_id')->diff($exemptions);
+        
         $active_ids = $this->user->refresh_tokens()
             ->pluck('character_id')->diff($exemptions);
 
-        return $active_ids->isNotEmpty() && $required_ids->diff($active_ids)->isEmpty();
+        return $active_ids->isNotEmpty();
     }
 
     /**
