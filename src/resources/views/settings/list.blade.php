@@ -193,6 +193,45 @@
 
   @endforeach
 
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">{{ trans('seat-connector::seat.excluded_sets') }}</h3>
+        </div>
+        <div class="card-body">
+          <p class="text-muted">{{ trans('seat-connector::seat.excluded_sets_help') }}</p>
+
+          <div class="row mb-3">
+            <div class="col-md-4">
+              <select id="excluded-sets-driver" class="form-control">
+                <option value="">{{ trans('seat-connector::seat.select_driver') }}</option>
+                @foreach($drivers as $key => $driver)
+                  <option value="{{ $key }}">{{ ucfirst($driver->name) }}</option>
+                @endforeach
+              </select>
+            </div>
+          </div>
+
+          <table class="table table-striped" id="excluded-sets-table">
+            <thead>
+              <tr>
+                <th>{{ trans('seat-connector::seat.set_name') }}</th>
+                <th>{{ trans('seat-connector::seat.driver') }}</th>
+                <th class="text-center">{{ trans('seat-connector::seat.excluded') }}</th>
+              </tr>
+            </thead>
+            <tbody id="excluded-sets-body">
+              <tr>
+                <td colspan="3" class="text-center text-muted">{{ trans('seat-connector::seat.select_driver_first') }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
 @stop
 
 @push('javascript')
@@ -220,6 +259,76 @@
                 'driver': driver,
                 'command': command
             },
+        });
+    });
+
+    // Excluded sets functionality
+    $('#excluded-sets-driver').on('change', function() {
+        var driver = $(this).val();
+        var tbody = $('#excluded-sets-body');
+
+        if (!driver) {
+            tbody.html('<tr><td colspan="3" class="text-center text-muted">{{ trans('seat-connector::seat.select_driver_first') }}</td></tr>');
+            return;
+        }
+
+        tbody.html('<tr><td colspan="3" class="text-center"><i class="fas fa-spinner fa-spin"></i> {{ trans('seat-connector::seat.loading') }}</td></tr>');
+
+        $.ajax({
+            'method': 'get',
+            'url': '{{ route('seat-connector.api.sets.all') }}',
+            'data': { 'driver': driver },
+            'success': function(response) {
+                if (response.results.length === 0) {
+                    tbody.html('<tr><td colspan="3" class="text-center text-muted">{{ trans('seat-connector::seat.no_sets_found') }}</td></tr>');
+                    return;
+                }
+
+                var html = '';
+                response.results.forEach(function(set) {
+                    var checked = set.is_excluded ? 'checked' : '';
+                    html += '<tr>' +
+                        '<td>' + set.name + '</td>' +
+                        '<td><span class="badge badge-secondary">' + set.connector_type + '</span></td>' +
+                        '<td class="text-center">' +
+                        '<input type="checkbox" class="excluded-set-toggle" data-set-id="' + set.id + '" ' + checked + '>' +
+                        '</td>' +
+                        '</tr>';
+                });
+                tbody.html(html);
+            },
+            'error': function() {
+                tbody.html('<tr><td colspan="3" class="text-center text-danger">{{ trans('seat-connector::seat.error_loading_sets') }}</td></tr>');
+            }
+        });
+    });
+
+    $(document).on('change', '.excluded-set-toggle', function() {
+        var checkbox = $(this);
+        var setId = checkbox.data('set-id');
+        var excluded = checkbox.is(':checked') ? 1 : 0;
+
+        $.ajax({
+            'method': 'post',
+            'url': '{{ route('seat-connector.sets.exclude') }}',
+            'data': {
+                'set_id': setId,
+                'excluded': excluded
+            },
+            'success': function(response) {
+                if (response.success) {
+                    // Show a brief visual feedback
+                    checkbox.closest('tr').addClass('table-success');
+                    setTimeout(function() {
+                        checkbox.closest('tr').removeClass('table-success');
+                    }, 500);
+                }
+            },
+            'error': function() {
+                // Revert the checkbox state on error
+                checkbox.prop('checked', !checkbox.is(':checked'));
+                alert('{{ trans('seat-connector::seat.error_updating_set') }}');
+            }
         });
     });
   </script>

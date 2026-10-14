@@ -1,0 +1,81 @@
+name: Connector verification
+
+on:
+  pull_request:
+    branches: [exclude-roles]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.1', '8.3']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: curl, dom, fileinfo, gd, gmp, intl, mbstring, pdo_sqlite, posix, redis, sqlite3
+          coverage: none
+          tools: composer:v2
+      - name: Validate package metadata
+        run: composer validate --no-check-publish
+      - name: Install dependencies for the reported SeAT versions
+        run: composer update --with eveseat/web:5.0.35 --with eveseat/eveapi:5.0.37 --no-interaction --prefer-dist --no-progress
+      - name: Check PHP syntax
+        run: find src tests -name '*.php' -print0 | xargs -0 -n1 php -l
+      - name: Run focused integration tests
+        run: composer test
+
+  modal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install isolated browser-handler test dependencies
+        run: npm install --prefix "$RUNNER_TEMP/connector-ui" --no-save --no-package-lock jsdom@26.1.0 jquery@3.7.1
+      - name: Run the production modal handler tests
+        env:
+          CONNECTOR_UI_NODE_MODULES: ${{ runner.temp }}/connector-ui/node_modules
+        run: node --test tests/modal.test.cjs
+
+  mariadb:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      database:
+        image: mariadb:10.11
+        env:
+          MARIADB_DATABASE: connector_test
+          MARIADB_ROOT_PASSWORD: connector_test_password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping -h localhost -uroot -pconnector_test_password"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: curl, dom, fileinfo, gd, gmp, intl, mbstring, pdo_mysql, pdo_sqlite, posix, redis, sqlite3
+          coverage: none
+          tools: composer:v2
+      - name: Install dependencies for the reported SeAT versions
+        run: composer update --with eveseat/web:5.0.35 --with eveseat/eveapi:5.0.37 --no-interaction --prefer-dist --no-progress
+      - name: Verify migrations and enforcement against MariaDB
+        env:
+          CONNECTOR_TEST_DB_DRIVER: mysql
+          CONNECTOR_TEST_DB_PASSWORD: connector_test_password
+        run: composer test

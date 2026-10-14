@@ -102,4 +102,36 @@ class LookupController extends Controller
             'results' => $sets,
         ]);
     }
+
+    /**
+     * Get all sets for a driver with their excluded status.
+     *
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getAllSets(Request $request)
+    {
+        $query = Set::query();
+
+        if ($request->has('driver') && $request->query('driver') !== '') {
+            $query->where('connector_type', $request->query('driver'));
+        }
+
+        if ($request->has('q') && $request->query('q') !== '') {
+            $query->where('name', 'like', '%' . $request->query('q') . '%');
+        }
+
+        $sets = $query->orderBy('name')
+            ->get()
+            ->map(fn($set): array => [
+                'id' => $set->id,
+                'connector_id' => $set->connector_id,
+                'name' => $set->name,
+                'connector_type' => $set->connector_type,
+                'is_excluded' => $set->is_excluded,
+            ]);
+
+        return response()->json([
+            'results' => $sets,
+        ]);
+    }
 }

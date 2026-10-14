@@ -34,6 +34,14 @@ Route::group([
         Route::group([
             'middleware' => 'can:global.superuser',
         ], function (): void {
+            Route::get('/users/{id}/strict-exemptions')
+                ->name('seat-connector.users.strict-exemptions.show')
+                ->uses('UsersController@getStrictExemptions');
+
+            Route::put('/users/{id}/strict-exemptions')
+                ->name('seat-connector.users.strict-exemptions.update')
+                ->uses('UsersController@updateStrictExemptions');
+
             Route::get('/settings')
                 ->name('seat-connector.settings')
                 ->uses('SettingsController@index');
@@ -74,6 +82,10 @@ Route::group([
                 ->name('seat-connector.acl.remove')
                 ->uses('AccessController@remove');
 
+            Route::post('/sets/exclude')
+                ->name('seat-connector.sets.exclude')
+                ->uses('AccessController@toggleExcluded');
+
             Route::group([
                 'prefix' => 'api',
             ], function (): void {
@@ -92,6 +104,10 @@ Route::group([
                 Route::get('/sets')
                     ->name('seat-connector.api.sets')
                     ->uses('LookupController@getSets');
+
+                Route::get('/sets/all')
+                    ->name('seat-connector.api.sets.all')
+                    ->uses('LookupController@getAllSets');
             });
         });
 

@@ -116,6 +116,30 @@ class AccessController extends Controller
     }
 
     /**
+     * Toggle the excluded status of a set.
+     *
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function toggleExcluded()
+    {
+        request()->validate([
+            'set_id' => 'required|exists:seat_connector_sets,id',
+            'excluded' => 'required|boolean',
+        ]);
+
+        $set = Set::find(request()->input('set_id'));
+        $set->is_excluded = request()->input('excluded');
+        $set->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => $set->is_excluded
+                ? sprintf('Set "%s" is now excluded from connector management.', $set->name)
+                : sprintf('Set "%s" is now managed by the connector.', $set->name),
+        ]);
+    }
+
+    /**
      * @return \Illuminate\Http\RedirectResponse
      * @throws \Exception
      */

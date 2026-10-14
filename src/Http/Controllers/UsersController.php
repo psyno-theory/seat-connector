@@ -23,13 +23,18 @@ namespace Warlof\Seat\Connector\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
+use Seat\Eveapi\Models\Character\CharacterInfo;
+use Illuminate\Support\Facades\DB;
+use Seat\Web\Models\User as SeatUser;
 use Seat\Web\Http\Controllers\Controller;
+use Warlof\Seat\Connector\Jobs\NotifyDriver;
 use Warlof\Seat\Connector\Exceptions\DriverException;
 use Warlof\Seat\Connector\Exceptions\DriverSettingsException;
 use Warlof\Seat\Connector\Exceptions\InvalidDriverIdentityException;
 use Warlof\Seat\Connector\Http\DataTables\Scopes\UserDataTableScope;
 use Warlof\Seat\Connector\Http\DataTables\UserMappingDataTable;
 use Warlof\Seat\Connector\Models\User;
+use Warlof\Seat\Connector\Models\StrictExemption;
 
 /**
  * Class UsersController.
@@ -137,4 +142,82 @@ class UsersController extends Controller
         return redirect()->back()
             ->with('success', 'Successfully updated name override!');
     }
+
+    /**
+     * Return only public display fields; token values are never serialized.
+     */
+    public function getStrictExemptions(int $id)
+    {
+        $identity = User::with('user')->findOrFail($id);
+        abort_unless($identity->connector_type === 'discord' && $identity->user, 404);
+
+        $tokens = $identity->user->refresh_tokens()->withTrashed()
+            ->get(['character_id', 'deleted_at']);
+        $names = CharacterInfo::whereIn('character_id', $tokens->pluck('character_id'))
+            ->pluck('name', 'character_id');
+        $exemptions = $identity->getStrictExemptCharacterIds();
+
+        $characters = $tokens->map(fn($token): array => [
+            'id' => (int) $token->character_id,
+            'name' => $names->get($token->character_id) ?? sprintf('Character %d', $token->character_id),
+            'has_token' => ! $token->trashed(),
+            'exempt' => in_array((int) $token->character_id, $exemptions, true),
+        ])->sortBy('name')->values();
+
+        return response()->json([
+            'characters' => $characters,
+            'update_url' => route('seat-connector.users.strict-exemptions.update', ['id' => $identity->id]),
+        ]);
+    }
+
+    public function updateStrictExemptions(Request $request, int $id)
+    {
+        $identity = User::with('user')->findOrFail($id);
+        abort_unless($identity->connector_type === 'discord' && $identity->user, 404);
+
+        $validated = $request->validate([
+            'characters' => 'present|array',
+            'characters.*' => 'required|integer|min:1|distinct',
+        ]);
+
+        $ids = array_map('intval', $validated['characters']);
+        sort($ids, SORT_NUMERIC);
+
+        DB::transaction(function () use ($identity, $ids): void {
+            // Serialize edits to this account; validate against current token ownership.
+            SeatUser::whereKey($identity->user_id)->lockForUpdate()->firstOrFail();
+            $linked_ids = $identity->user->refresh_tokens()->withTrashed()->lockForUpdate()
+                ->pluck('character_id')->map(fn($character_id): int => (int) $character_id)->all();
+
+            if (array_diff($ids, $linked_ids) !== []) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'characters' => 'Every exempt character must belong to this SeAT account.',
+                ]);
+            }
+
+            $previous = $identity->getStrictExemptCharacterIds();
+            StrictExemption::where('user_id', $identity->user_id)->delete();
+            foreach ($ids as $character_id) {
+                StrictExemption::create(['user_id' => $identity->user_id, 'character_id' => $character_id]);
+            }
+
+            event('security.log', [
+                sprintf('Discord Strict exemptions for SeAT user %d (%s) changed from [%s] to [%s].',
+                    $identity->user_id, $identity->user->name, implode(', ', $previous), implode(', ', $ids)),
+                'connector strict exemptions',
+            ]);
+        });
+
+        $message = 'Exemptions saved. A role update has been queued. At least one valid, non-exempt character is still required.';
+
+        try {
+            NotifyDriver::dispatch($identity->user)->onQueue('high');
+        } catch (\Exception $e) {
+            report($e);
+            $message = 'Exemptions saved. The role update could not be queued; the next scheduled connector sync will apply them.';
+        }
+
+        return response()->json(['success' => true, 'message' => $message]);
+    }
+
 }

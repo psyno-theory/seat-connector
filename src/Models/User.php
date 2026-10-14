@@ -76,7 +76,37 @@ class User extends Model
      */
     public function areAllTokensValid(): bool
     {
-        return $this->user->refresh_tokens->count() == $this->user->all_characters()->count();
+        $exemptions = $this->getStrictExemptCharacterIds();
+
+        // Include revoked tokens so missing authentication cannot disappear from the check.
+        $required_ids = $this->user->refresh_tokens()->withTrashed()
+            ->pluck('character_id')->diff($exemptions);
+        $active_ids = $this->user->refresh_tokens()
+            ->pluck('character_id')->diff($exemptions);
+
+        return $active_ids->isNotEmpty() && $required_ids->diff($active_ids)->isEmpty();
+    }
+
+    /**
+     * Only Discord uses these account-scoped exemptions.
+     *
+     * @return int[]
+     */
+    public function getStrictExemptCharacterIds(): array
+    {
+        if ($this->connector_type !== 'discord') {
+            return [];
+        }
+
+        // A transferred token must not carry the previous account's exemption.
+        // Raw joins deliberately include soft-deleted (revoked) token records.
+        return StrictExemption::query()
+            ->join('refresh_tokens', 'refresh_tokens.character_id', '=', 'seat_connector_strict_exemptions.character_id')
+            ->where('seat_connector_strict_exemptions.user_id', $this->user_id)
+            ->where('refresh_tokens.user_id', $this->user_id)
+            ->orderBy('seat_connector_strict_exemptions.character_id')
+            ->pluck('seat_connector_strict_exemptions.character_id')
+            ->map(fn($id): int => (int) $id)->all();
     }
 
     /**
@@ -97,9 +127,9 @@ class User extends Model
     {
         $strict_mode = setting('seat-connector.strict', true);
 
-        $active_tokens = $this->user->refresh_tokens;
+        $active_tokens = $this->user->refresh_tokens();
 
-        if (empty($active_tokens) || ($strict_mode && ! $this->areAllTokensValid()) || ! $this->isEnabledAccount()) {
+        if (! $active_tokens->exists() || ($strict_mode && ! $this->areAllTokensValid()) || ! $this->isEnabledAccount()) {
             return [];
         }
 

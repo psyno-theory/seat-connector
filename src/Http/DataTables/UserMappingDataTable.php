@@ -48,7 +48,7 @@ class UserMappingDataTable extends DataTable
     public function query(): \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder
     {
         return User::with('user')
-            ->select('seat_connector_users.id', 'connector_id', 'connector_name', 'name_override', 'user_id');
+            ->select('seat_connector_users.id', 'connector_type', 'connector_id', 'connector_name', 'name_override', 'user_id');
     }
 
     /**

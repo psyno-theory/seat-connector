@@ -54,3 +54,10 @@ The connector is shipped with two commands :
 ![UML Object Schema](./docs/ConnectorObjectDiagram.png)
 
 Build your own [driver](./docs/ImplementDriver.md)
+
+## Discord Strict character exemptions
+
+This fork stores superuser-approved character exemptions in a dedicated connector
+table while requiring at least one valid, non-exempt character. Existing
+excluded-role behaviour is preserved. This revision requires package migrations.
+See [behaviour, Docker installation and verification](docs/StrictCharacterExemptions.md).

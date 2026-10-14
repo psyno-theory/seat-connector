@@ -49,13 +49,14 @@ class Set extends Model
      */
     protected $casts = [
         'is_public' => 'boolean',
+        'is_excluded' => 'boolean',
     ];
 
     /**
      * @var array
      */
     protected $fillable = [
-        'connector_type', 'connector_id', 'name', 'is_public',
+        'connector_type', 'connector_id', 'name', 'is_public', 'is_excluded',
     ];
 
     /**

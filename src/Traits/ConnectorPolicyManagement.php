@@ -23,6 +23,7 @@ namespace Warlof\Seat\Connector\Traits;
 
 use Warlof\Seat\Connector\Drivers\IUser;
 use Warlof\Seat\Connector\Events\EventLogger;
+use Warlof\Seat\Connector\Models\Set;
 use Warlof\Seat\Connector\Models\User;
 
 /**
@@ -83,6 +84,11 @@ trait ConnectorPolicyManagement
         $pending_drops = collect();
 
         foreach ($sets as $set) {
+            // skip excluded sets - they are not managed by the connector
+            if ($this->isExcludedSet($profile->connector_type, $set->getId())) {
+                continue;
+            }
+
             if ($this->terminator || ! $profile->isAllowedSet($set->getId())) {
                 $pending_drops->push($set->getId());
             }
@@ -107,12 +113,32 @@ trait ConnectorPolicyManagement
         $allowed_sets = $profile->allowedSets();
 
         foreach ($allowed_sets as $set_id) {
+            // skip excluded sets - they are not managed by the connector
+            if ($this->isExcludedSet($profile->connector_type, $set_id)) {
+                continue;
+            }
+
             if (array_filter($sets, fn($set): bool => $set->getId() == $set_id) === []) {
                 $pending_adds->push($set_id);
             }
         }
 
         return $pending_adds;
+    }
+
+    /**
+     * Check if a set is marked as excluded from connector management.
+     *
+     * @param string $connector_type
+     * @param string $set_id
+     * @return bool
+     */
+    private function isExcludedSet(string $connector_type, string $set_id): bool
+    {
+        return Set::where('connector_type', $connector_type)
+            ->where('connector_id', $set_id)
+            ->where('is_excluded', true)
+            ->exists();
     }
 
     /**

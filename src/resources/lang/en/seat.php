@@ -65,4 +65,16 @@ return [
 
 
     'identities'         => 'Identity|Identities',
+
+    // Excluded sets
+    'excluded_sets'        => 'Excluded Sets',
+    'excluded_sets_help'   => 'Sets marked as excluded will not be added or removed by the connector. Use this for roles you want to manage manually (e.g., admin roles, special roles).',
+    'select_driver'        => 'Select a Driver...',
+    'set_name'             => 'Set Name',
+    'excluded'             => 'Excluded',
+    'select_driver_first'  => 'Please select a driver to view available sets.',
+    'loading'              => 'Loading...',
+    'no_sets_found'        => 'No sets found. Try running "Update Sets" first.',
+    'error_loading_sets'   => 'Error loading sets. Please try again.',
+    'error_updating_set'   => 'Error updating set. Please try again.',
 ];
