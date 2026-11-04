@@ -126,7 +126,7 @@ class User extends Model
 
         $active_tokens = $this->user->refresh_tokens();
 
-        if (! $active_tokens->exists() || ($strict_mode && ! $this->areAllTokensValid()) || ! $this->isEnabledAccount()) {
+        if (! $active_tokens->exists() || $active_tokens->isEmpty() || ($strict_mode && ! $this->areAllTokensValid()) || ! $this->isEnabledAccount()) {
             return [];
         }
 
@@ -266,7 +266,9 @@ class User extends Model
                 $corp_ticker = $corporation->ticker ?? '';
                 $alliance_ticker = $alliance->ticker ?? '';
 
-                $nickname = sprintf($format, $nickname, $corp_ticker, $alliance_ticker);
+                $combined_ticker = $alliance->ticker ?? ($corporation->ticker ?? '');
+
+                $nickname = sprintf($format, $nickname, $corp_ticker, $alliance_ticker, $combined_ticker);
             }
         }
 
